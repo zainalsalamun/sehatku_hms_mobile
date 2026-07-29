@@ -1,0 +1,2223 @@
+openapi: 3.1.0
+info:
+  title: SehatKu HMS API
+  version: 1.0.0
+  summary: Backend contract for Patient, Doctor, and Admin applications.
+  description: |
+    Source of truth untuk implementasi backend SehatKu HMS.
+    Semua endpoint kecuali login/refresh memerlukan access token.
+    Data selalu dibatasi oleh hospital scope dan permission actor.
+servers:
+  - url: https://api.staging.sehatku.id/v1
+    description: Staging
+  - url: http://localhost:8080/v1
+    description: Local
+security:
+  - bearerAuth: []
+tags:
+  - name: Auth
+  - name: Doctors
+  - name: Patients
+  - name: Appointments
+  - name: Queue
+  - name: Clinical
+  - name: Prescriptions
+  - name: Billing
+  - name: Admin
+  - name: Audit
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      security: []
+      summary: Authenticate a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshToken
+      security: []
+      summary: Rotate a refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+                  minLength: 20
+      responses:
+        '200':
+          description: Token rotated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: Revoke the current session
+      responses:
+        '204':
+          description: Session revoked
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /me:
+    get:
+      tags: [Auth]
+      operationId: getCurrentUser
+      summary: Get current user and scoped permissions
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /doctors:
+    get:
+      tags: [Doctors]
+      operationId: listDoctors
+      summary: Search active doctors and availability
+      parameters:
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Search'
+        - name: filter[department_id]
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: filter[available_date]
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: sort
+          in: query
+          schema:
+            type: string
+            example: -rating,name
+      responses:
+        '200':
+          description: Paginated doctor list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /doctors/{doctorId}:
+    get:
+      tags: [Doctors]
+      operationId: getDoctor
+      summary: Get doctor profile and schedule summary
+      parameters:
+        - $ref: '#/components/parameters/DoctorId'
+      responses:
+        '200':
+          description: Doctor detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /doctors/{doctorId}/slots:
+    get:
+      tags: [Doctors]
+      operationId: listDoctorSlots
+      summary: List bookable slots
+      parameters:
+        - $ref: '#/components/parameters/DoctorId'
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Available slots
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DoctorSlot'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /patients/me:
+    get:
+      tags: [Patients]
+      operationId: getMyPatientProfile
+      summary: Get the signed-in patient's profile
+      responses:
+        '200':
+          description: Patient profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientResponse'
+    patch:
+      tags: [Patients]
+      operationId: updateMyPatientProfile
+      summary: Update patient-editable demographic fields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatientSelfUpdate'
+      responses:
+        '200':
+          description: Updated patient
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /appointments:
+    get:
+      tags: [Appointments]
+      operationId: listAppointments
+      summary: List appointments visible to the actor
+      parameters:
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+        - name: filter[status]
+          in: query
+          schema:
+            $ref: '#/components/schemas/AppointmentStatus'
+        - name: filter[from]
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: filter[to]
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Appointment list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppointmentListResponse'
+    post:
+      tags: [Appointments]
+      operationId: createAppointment
+      summary: Book an available doctor slot
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppointmentCreate'
+      responses:
+        '201':
+          description: Appointment created
+          headers:
+            Location:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppointmentResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /appointments/{appointmentId}:
+    get:
+      tags: [Appointments]
+      operationId: getAppointment
+      parameters:
+        - $ref: '#/components/parameters/AppointmentId'
+      responses:
+        '200':
+          description: Appointment detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppointmentResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Appointments]
+      operationId: updateAppointment
+      summary: Reschedule or update a permitted appointment field
+      parameters:
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppointmentUpdate'
+      responses:
+        '200':
+          description: Appointment updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppointmentResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [Appointments]
+      operationId: cancelAppointment
+      summary: Cancel rather than hard-delete an appointment
+      parameters:
+        - $ref: '#/components/parameters/AppointmentId'
+        - name: reason
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 500
+      responses:
+        '204':
+          description: Appointment cancelled
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /appointments/{appointmentId}/check-in:
+    post:
+      tags: [Appointments, Queue]
+      operationId: checkInAppointment
+      parameters:
+        - $ref: '#/components/parameters/AppointmentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [method]
+              properties:
+                method:
+                  type: string
+                  enum: [qr, kiosk, receptionist]
+                qr_token:
+                  type: [string, 'null']
+      responses:
+        '201':
+          description: Checked in and queue ticket assigned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueTicketResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /queue/tickets/{queueTicketId}:
+    get:
+      tags: [Queue]
+      operationId: getQueueTicket
+      parameters:
+        - $ref: '#/components/parameters/QueueTicketId'
+      responses:
+        '200':
+          description: Current queue state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueTicketResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /queue/tickets/{queueTicketId}/actions:
+    post:
+      tags: [Queue]
+      operationId: transitionQueueTicket
+      summary: Call, recall, start, skip, restore, or complete a queue ticket
+      parameters:
+        - $ref: '#/components/parameters/QueueTicketId'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [call, recall, start, skip, restore, complete]
+                reason:
+                  type: [string, 'null']
+                  maxLength: 500
+      responses:
+        '200':
+          description: Queue state transitioned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueTicketResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /patients/{patientId}/medical-records:
+    get:
+      tags: [Clinical]
+      operationId: listMedicalRecords
+      summary: List medical record timeline with relationship-based access
+      parameters:
+        - $ref: '#/components/parameters/PatientId'
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Medical record timeline
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicalRecordListResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /encounters:
+    post:
+      tags: [Clinical]
+      operationId: createEncounter
+      summary: Start a consultation encounter
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterCreate'
+      responses:
+        '201':
+          description: Encounter started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /encounters/{encounterId}:
+    patch:
+      tags: [Clinical]
+      operationId: updateEncounter
+      summary: Update an unsigned encounter
+      parameters:
+        - $ref: '#/components/parameters/EncounterId'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EncounterUpdate'
+      responses:
+        '200':
+          description: Encounter updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /encounters/{encounterId}/sign:
+    post:
+      tags: [Clinical]
+      operationId: signEncounter
+      summary: Sign and make the encounter append-only
+      parameters:
+        - $ref: '#/components/parameters/EncounterId'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200':
+          description: Encounter signed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EncounterResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /encounters/{encounterId}/prescriptions:
+    post:
+      tags: [Prescriptions]
+      operationId: createPrescription
+      parameters:
+        - $ref: '#/components/parameters/EncounterId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrescriptionCreate'
+      responses:
+        '201':
+          description: Prescription created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrescriptionResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /prescriptions/{prescriptionId}:
+    get:
+      tags: [Prescriptions]
+      operationId: getPrescription
+      parameters:
+        - name: prescriptionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Prescription detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrescriptionResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /invoices/{invoiceId}:
+    get:
+      tags: [Billing]
+      operationId: getInvoice
+      parameters:
+        - $ref: '#/components/parameters/InvoiceId'
+      responses:
+        '200':
+          description: Invoice detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /invoices/{invoiceId}/payments:
+    post:
+      tags: [Billing]
+      operationId: initiatePayment
+      parameters:
+        - $ref: '#/components/parameters/InvoiceId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, method]
+              properties:
+                provider:
+                  type: string
+                  example: midtrans
+                method:
+                  type: string
+                  enum: [virtual_account, card, ewallet, cash]
+      responses:
+        '201':
+          description: Payment initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /webhooks/payments/{provider}:
+    post:
+      tags: [Billing]
+      operationId: receivePaymentWebhook
+      security: []
+      summary: Provider webhook; signature headers are provider-specific
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: X-Webhook-Signature
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '202':
+          description: Accepted or previously processed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /admin/dashboard:
+    get:
+      tags: [Admin]
+      operationId: getAdminDashboard
+      summary: Aggregated operational metrics
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Dashboard metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /admin/departments:
+    get:
+      tags: [Admin]
+      operationId: adminListDepartments
+      parameters:
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Search'
+      responses:
+        '200':
+          description: Department list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentListResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin]
+      operationId: adminCreateDepartment
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepartmentWrite'
+      responses:
+        '201':
+          description: Department created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /admin/departments/{departmentId}:
+    get:
+      tags: [Admin]
+      operationId: adminGetDepartment
+      parameters:
+        - $ref: '#/components/parameters/DepartmentId'
+      responses:
+        '200':
+          description: Department detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Admin]
+      operationId: adminUpdateDepartment
+      parameters:
+        - $ref: '#/components/parameters/DepartmentId'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepartmentWrite'
+      responses:
+        '200':
+          description: Department updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Admin]
+      operationId: adminDeactivateDepartment
+      parameters:
+        - $ref: '#/components/parameters/DepartmentId'
+      responses:
+        '204':
+          description: Department deactivated
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /admin/doctors:
+    get:
+      tags: [Admin]
+      operationId: adminListDoctors
+      parameters:
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Search'
+        - name: filter[department_id]
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: filter[status]
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive, suspended]
+      responses:
+        '200':
+          description: Doctor list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorListResponse'
+    post:
+      tags: [Admin]
+      operationId: adminCreateDoctor
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DoctorWrite'
+      responses:
+        '201':
+          description: Doctor created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /admin/doctors/{doctorId}:
+    get:
+      tags: [Admin]
+      operationId: adminGetDoctor
+      parameters:
+        - $ref: '#/components/parameters/DoctorId'
+      responses:
+        '200':
+          description: Doctor detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Admin]
+      operationId: adminUpdateDoctor
+      parameters:
+        - $ref: '#/components/parameters/DoctorId'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DoctorWrite'
+      responses:
+        '200':
+          description: Doctor updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Admin]
+      operationId: adminDeactivateDoctor
+      parameters:
+        - $ref: '#/components/parameters/DoctorId'
+      responses:
+        '204':
+          description: Doctor deactivated
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /admin/doctors/{doctorId}/schedules:
+    get:
+      tags: [Admin]
+      operationId: adminListDoctorSchedules
+      parameters:
+        - $ref: '#/components/parameters/DoctorId'
+      responses:
+        '200':
+          description: Doctor schedules
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DoctorSchedule'
+    post:
+      tags: [Admin]
+      operationId: adminCreateDoctorSchedule
+      parameters:
+        - $ref: '#/components/parameters/DoctorId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DoctorScheduleWrite'
+      responses:
+        '201':
+          description: Schedule created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/DoctorSchedule'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /admin/patients:
+    get:
+      tags: [Admin]
+      operationId: adminListPatients
+      parameters:
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Search'
+        - name: filter[status]
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive, deceased]
+      responses:
+        '200':
+          description: Patient list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientListResponse'
+    post:
+      tags: [Admin]
+      operationId: adminCreatePatient
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatientWrite'
+      responses:
+        '201':
+          description: Patient created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientResponse'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /admin/patients/{patientId}:
+    get:
+      tags: [Admin]
+      operationId: adminGetPatient
+      parameters:
+        - $ref: '#/components/parameters/PatientId'
+      responses:
+        '200':
+          description: Patient detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Admin]
+      operationId: adminUpdatePatient
+      parameters:
+        - $ref: '#/components/parameters/PatientId'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatientWrite'
+      responses:
+        '200':
+          description: Patient updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+    delete:
+      tags: [Admin]
+      operationId: adminDeactivatePatient
+      parameters:
+        - $ref: '#/components/parameters/PatientId'
+      responses:
+        '204':
+          description: Patient deactivated
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /admin/appointments:
+    get:
+      tags: [Admin]
+      operationId: adminListAppointments
+      parameters:
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Search'
+        - name: filter[doctor_id]
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: filter[patient_id]
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: filter[status]
+          in: query
+          schema:
+            $ref: '#/components/schemas/AppointmentStatus'
+      responses:
+        '200':
+          description: Appointment list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppointmentListResponse'
+  /admin/invoices:
+    get:
+      tags: [Admin, Billing]
+      operationId: adminListInvoices
+      parameters:
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Search'
+        - name: filter[status]
+          in: query
+          schema:
+            type: string
+            enum: [draft, issued, paid, void, overdue]
+      responses:
+        '200':
+          description: Invoice list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceListResponse'
+  /admin/payments/{paymentId}/refunds:
+    post:
+      tags: [Admin, Billing]
+      operationId: adminCreateRefund
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount, reason]
+              properties:
+                amount:
+                  $ref: '#/components/schemas/Money'
+                reason:
+                  type: string
+                  minLength: 5
+                  maxLength: 500
+      responses:
+        '202':
+          description: Refund submitted for processing or approval
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /admin/audit-logs:
+    get:
+      tags: [Audit]
+      operationId: adminListAuditLogs
+      parameters:
+        - $ref: '#/components/parameters/PageNumber'
+        - $ref: '#/components/parameters/PageSize'
+        - name: filter[actor_id]
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: filter[resource_type]
+          in: query
+          schema:
+            type: string
+        - name: filter[from]
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: filter[to]
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Immutable audit events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogListResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    PageNumber:
+      name: page[number]
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: page[size]
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Search:
+      name: search
+      in: query
+      schema:
+        type: string
+        maxLength: 100
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Current integer version of the resource.
+      schema:
+        type: string
+        pattern: '^[0-9]+$'
+    DoctorId:
+      name: doctorId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    PatientId:
+      name: patientId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DepartmentId:
+      name: departmentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AppointmentId:
+      name: appointmentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    QueueTicketId:
+      name: queueTicketId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    EncounterId:
+      name: encounterId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    InvoiceId:
+      name: invoiceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    Unauthorized:
+      description: Authentication failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Actor lacks permission or resource relationship
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found in the actor scope
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: State, version, uniqueness, or slot conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: Validation or business rule violation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    RateLimited:
+      description: Too many requests
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+        device:
+          type: object
+          properties:
+            id:
+              type: string
+              maxLength: 200
+            platform:
+              type: string
+              enum: [android, ios, web, macos]
+    AuthTokens:
+      type: object
+      required: [access_token, refresh_token, expires_in, token_type]
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        expires_in:
+          type: integer
+          example: 900
+        token_type:
+          type: string
+          const: Bearer
+    AuthResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [user, tokens]
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+            tokens:
+              $ref: '#/components/schemas/AuthTokens'
+    User:
+      type: object
+      required: [id, email, name, roles, permissions, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+            enum:
+              - patient
+              - doctor
+              - receptionist
+              - cashier
+              - hospital_admin
+              - super_admin
+              - auditor
+        permissions:
+          type: array
+          items:
+            type: string
+          example: [doctors.read, appointments.write]
+        hospital_id:
+          type: [string, 'null']
+          format: uuid
+        status:
+          type: string
+          enum: [active, invited, locked, inactive]
+    UserResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/User'
+    Department:
+      type: object
+      required: [id, code, name, status, version]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: [string, 'null']
+        status:
+          type: string
+          enum: [active, inactive]
+        version:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    DepartmentWrite:
+      type: object
+      additionalProperties: false
+      required: [code, name]
+      properties:
+        code:
+          type: string
+          minLength: 2
+          maxLength: 30
+          pattern: '^[A-Z0-9_-]+$'
+        name:
+          type: string
+          minLength: 2
+          maxLength: 120
+        description:
+          type: [string, 'null']
+          maxLength: 1000
+        status:
+          type: string
+          enum: [active, inactive]
+    DepartmentResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Department'
+    DepartmentListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Department'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+        links:
+          $ref: '#/components/schemas/ListLinks'
+    Doctor:
+      type: object
+      required:
+        - id
+        - name
+        - specialist
+        - department_id
+        - license_number
+        - experience_years
+        - rating
+        - status
+        - version
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        specialist:
+          type: string
+        department_id:
+          type: string
+          format: uuid
+        department_name:
+          type: string
+        license_number:
+          type: string
+        biography:
+          type: [string, 'null']
+        experience_years:
+          type: integer
+          minimum: 0
+        rating:
+          type: number
+          minimum: 0
+          maximum: 5
+        photo_url:
+          type: [string, 'null']
+          format: uri
+        status:
+          type: string
+          enum: [active, inactive, suspended]
+        version:
+          type: integer
+    DoctorWrite:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - email
+        - specialist
+        - department_id
+        - license_number
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 150
+        email:
+          type: string
+          format: email
+        specialist:
+          type: string
+          maxLength: 120
+        department_id:
+          type: string
+          format: uuid
+        license_number:
+          type: string
+          minLength: 3
+          maxLength: 80
+        biography:
+          type: [string, 'null']
+          maxLength: 3000
+        experience_years:
+          type: integer
+          minimum: 0
+          maximum: 70
+        status:
+          type: string
+          enum: [active, inactive, suspended]
+    DoctorResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Doctor'
+    DoctorListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Doctor'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+        links:
+          $ref: '#/components/schemas/ListLinks'
+    DoctorSchedule:
+      type: object
+      required:
+        - id
+        - doctor_id
+        - day_of_week
+        - start_time
+        - end_time
+        - slot_minutes
+        - capacity
+        - status
+        - version
+      properties:
+        id:
+          type: string
+          format: uuid
+        doctor_id:
+          type: string
+          format: uuid
+        day_of_week:
+          type: integer
+          minimum: 1
+          maximum: 7
+        start_time:
+          type: string
+          format: time
+        end_time:
+          type: string
+          format: time
+        slot_minutes:
+          type: integer
+          minimum: 5
+          maximum: 240
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 20
+        location:
+          type: string
+        valid_from:
+          type: string
+          format: date
+        valid_to:
+          type: [string, 'null']
+          format: date
+        status:
+          type: string
+          enum: [active, inactive]
+        version:
+          type: integer
+    DoctorScheduleWrite:
+      type: object
+      additionalProperties: false
+      required: [day_of_week, start_time, end_time, slot_minutes, capacity]
+      properties:
+        day_of_week:
+          type: integer
+          minimum: 1
+          maximum: 7
+        start_time:
+          type: string
+          format: time
+        end_time:
+          type: string
+          format: time
+        slot_minutes:
+          type: integer
+          minimum: 5
+          maximum: 240
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 20
+        location:
+          type: string
+          maxLength: 120
+        valid_from:
+          type: string
+          format: date
+        valid_to:
+          type: [string, 'null']
+          format: date
+    DoctorSlot:
+      type: object
+      required: [id, doctor_id, starts_at, ends_at, available_capacity]
+      properties:
+        id:
+          type: string
+          description: Opaque signed slot identifier.
+        doctor_id:
+          type: string
+          format: uuid
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        available_capacity:
+          type: integer
+          minimum: 0
+    Patient:
+      type: object
+      required:
+        - id
+        - medical_record_number
+        - name
+        - birth_date
+        - gender
+        - status
+        - version
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: [string, 'null']
+          format: uuid
+        medical_record_number:
+          type: string
+        name:
+          type: string
+        email:
+          type: [string, 'null']
+          format: email
+        phone:
+          type: [string, 'null']
+        birth_date:
+          type: string
+          format: date
+        gender:
+          type: string
+          enum: [female, male, other, undisclosed]
+        blood_type:
+          type: [string, 'null']
+          enum: [A+, A-, B+, B-, AB+, AB-, O+, O-, null]
+        insurance:
+          $ref: '#/components/schemas/Insurance'
+        emergency_contact:
+          $ref: '#/components/schemas/EmergencyContact'
+        status:
+          type: string
+          enum: [active, inactive, deceased]
+        version:
+          type: integer
+    PatientWrite:
+      type: object
+      additionalProperties: false
+      required: [name, birth_date, gender]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 150
+        email:
+          type: [string, 'null']
+          format: email
+        phone:
+          type: [string, 'null']
+          maxLength: 30
+        birth_date:
+          type: string
+          format: date
+        gender:
+          type: string
+          enum: [female, male, other, undisclosed]
+        blood_type:
+          type: [string, 'null']
+          enum: [A+, A-, B+, B-, AB+, AB-, O+, O-, null]
+        insurance:
+          $ref: '#/components/schemas/Insurance'
+        emergency_contact:
+          $ref: '#/components/schemas/EmergencyContact'
+        status:
+          type: string
+          enum: [active, inactive, deceased]
+    PatientSelfUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        phone:
+          type: [string, 'null']
+          maxLength: 30
+        insurance:
+          $ref: '#/components/schemas/Insurance'
+        emergency_contact:
+          $ref: '#/components/schemas/EmergencyContact'
+    Insurance:
+      type: [object, 'null']
+      properties:
+        provider:
+          type: string
+          maxLength: 120
+        member_number:
+          type: string
+          maxLength: 100
+        status:
+          type: string
+          enum: [active, inactive, unknown]
+    EmergencyContact:
+      type: [object, 'null']
+      properties:
+        name:
+          type: string
+          maxLength: 150
+        relationship:
+          type: string
+          maxLength: 80
+        phone:
+          type: string
+          maxLength: 30
+    PatientResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Patient'
+    PatientListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Patient'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+        links:
+          $ref: '#/components/schemas/ListLinks'
+    AppointmentStatus:
+      type: string
+      enum:
+        - pending_payment
+        - confirmed
+        - checked_in
+        - in_queue
+        - in_consultation
+        - completed
+        - cancelled
+        - no_show
+    Appointment:
+      type: object
+      required:
+        - id
+        - doctor
+        - patient
+        - starts_at
+        - ends_at
+        - status
+        - version
+      properties:
+        id:
+          type: string
+          format: uuid
+        doctor:
+          $ref: '#/components/schemas/Doctor'
+        patient:
+          $ref: '#/components/schemas/Patient'
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        reason:
+          type: [string, 'null']
+        status:
+          $ref: '#/components/schemas/AppointmentStatus'
+        queue_ticket_id:
+          type: [string, 'null']
+          format: uuid
+        invoice_id:
+          type: [string, 'null']
+          format: uuid
+        cancellation_reason:
+          type: [string, 'null']
+        version:
+          type: integer
+    AppointmentCreate:
+      type: object
+      additionalProperties: false
+      required: [patient_id, doctor_id, slot_id, reason]
+      properties:
+        patient_id:
+          type: string
+          format: uuid
+        doctor_id:
+          type: string
+          format: uuid
+        slot_id:
+          type: string
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 1000
+        payment_method:
+          type: [string, 'null']
+    AppointmentUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        slot_id:
+          type: string
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 1000
+    AppointmentResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Appointment'
+    AppointmentListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Appointment'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+        links:
+          $ref: '#/components/schemas/ListLinks'
+    QueueTicket:
+      type: object
+      required:
+        - id
+        - appointment_id
+        - number
+        - status
+        - version
+        - current_number
+      properties:
+        id:
+          type: string
+          format: uuid
+        appointment_id:
+          type: string
+          format: uuid
+        number:
+          type: string
+          example: A-032
+        status:
+          type: string
+          enum: [waiting, called, serving, skipped, completed, void]
+        current_number:
+          type: string
+          example: A-028
+        estimated_wait_minutes:
+          type: integer
+          minimum: 0
+        called_at:
+          type: [string, 'null']
+          format: date-time
+        version:
+          type: integer
+    QueueTicketResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/QueueTicket'
+    Encounter:
+      type: object
+      required:
+        - id
+        - appointment_id
+        - patient_id
+        - doctor_id
+        - status
+        - diagnoses
+        - version
+      properties:
+        id:
+          type: string
+          format: uuid
+        appointment_id:
+          type: string
+          format: uuid
+        patient_id:
+          type: string
+          format: uuid
+        doctor_id:
+          type: string
+          format: uuid
+        symptoms:
+          type: [string, 'null']
+        assessment:
+          type: [string, 'null']
+        recommendation:
+          type: [string, 'null']
+        diagnoses:
+          type: array
+          items:
+            $ref: '#/components/schemas/Diagnosis'
+        status:
+          type: string
+          enum: [in_progress, signed, corrected]
+        started_at:
+          type: string
+          format: date-time
+        signed_at:
+          type: [string, 'null']
+          format: date-time
+        version:
+          type: integer
+    Diagnosis:
+      type: object
+      required: [description, type]
+      properties:
+        code:
+          type: [string, 'null']
+          maxLength: 30
+        description:
+          type: string
+          minLength: 2
+          maxLength: 500
+        type:
+          type: string
+          enum: [primary, secondary]
+    EncounterCreate:
+      type: object
+      additionalProperties: false
+      required: [appointment_id]
+      properties:
+        appointment_id:
+          type: string
+          format: uuid
+    EncounterUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        symptoms:
+          type: [string, 'null']
+          maxLength: 5000
+        assessment:
+          type: [string, 'null']
+          maxLength: 5000
+        recommendation:
+          type: [string, 'null']
+          maxLength: 5000
+        diagnoses:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/Diagnosis'
+    EncounterResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Encounter'
+    MedicalRecord:
+      type: object
+      required: [id, encounter_id, date, doctor_name, diagnoses]
+      properties:
+        id:
+          type: string
+          format: uuid
+        encounter_id:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date-time
+        doctor_name:
+          type: string
+        diagnoses:
+          type: array
+          items:
+            $ref: '#/components/schemas/Diagnosis'
+        prescription_id:
+          type: [string, 'null']
+          format: uuid
+        document_count:
+          type: integer
+          minimum: 0
+    MedicalRecordListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/MedicalRecord'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+        links:
+          $ref: '#/components/schemas/ListLinks'
+    Prescription:
+      type: object
+      required: [id, encounter_id, patient_id, doctor_id, status, items, issued_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        encounter_id:
+          type: string
+          format: uuid
+        patient_id:
+          type: string
+          format: uuid
+        doctor_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [draft, issued, dispensed, void]
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrescriptionItem'
+        issued_at:
+          type: string
+          format: date-time
+    PrescriptionItem:
+      type: object
+      required:
+        - medicine
+        - dosage
+        - route
+        - frequency
+        - duration_days
+        - quantity
+      properties:
+        medicine:
+          type: string
+          maxLength: 200
+        dosage:
+          type: string
+          maxLength: 100
+        route:
+          type: string
+          maxLength: 50
+        frequency:
+          type: string
+          maxLength: 100
+        duration_days:
+          type: integer
+          minimum: 1
+          maximum: 365
+        quantity:
+          type: number
+          exclusiveMinimum: 0
+        instruction:
+          type: [string, 'null']
+          maxLength: 500
+    PrescriptionCreate:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/PrescriptionItem'
+    PrescriptionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Prescription'
+    Money:
+      type: object
+      required: [value, currency]
+      properties:
+        value:
+          type: integer
+          minimum: 0
+          description: Minor currency unit. For IDR this is whole rupiah.
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+          example: IDR
+    Invoice:
+      type: object
+      required: [id, number, patient_id, total, status, version]
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: string
+        appointment_id:
+          type: string
+          format: uuid
+        patient_id:
+          type: string
+          format: uuid
+        total:
+          $ref: '#/components/schemas/Money'
+        status:
+          type: string
+          enum: [draft, issued, paid, void, overdue]
+        due_at:
+          type: [string, 'null']
+          format: date-time
+        version:
+          type: integer
+    InvoiceResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Invoice'
+    InvoiceListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Invoice'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+        links:
+          $ref: '#/components/schemas/ListLinks'
+    Payment:
+      type: object
+      required: [id, invoice_id, provider, amount, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        invoice_id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+        provider_reference:
+          type: [string, 'null']
+        amount:
+          $ref: '#/components/schemas/Money'
+        status:
+          type: string
+          enum: [pending, paid, failed, expired, refunded, partially_refunded]
+        redirect_url:
+          type: [string, 'null']
+          format: uri
+        paid_at:
+          type: [string, 'null']
+          format: date-time
+    PaymentResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/Payment'
+    DashboardResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [patients, active_doctors, appointments, revenue, trends]
+          properties:
+            patients:
+              type: integer
+            active_doctors:
+              type: integer
+            appointments:
+              type: integer
+            revenue:
+              $ref: '#/components/schemas/Money'
+            trends:
+              type: array
+              items:
+                type: object
+                required: [date, patient_visits, appointments, revenue]
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  patient_visits:
+                    type: integer
+                  appointments:
+                    type: integer
+                  revenue:
+                    $ref: '#/components/schemas/Money'
+    AuditLog:
+      type: object
+      required:
+        - id
+        - actor_id
+        - action
+        - resource_type
+        - resource_id
+        - request_id
+        - occurred_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        actor_id:
+          type: string
+          format: uuid
+        actor_role:
+          type: string
+        action:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+        purpose:
+          type: [string, 'null']
+        request_id:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+    AuditLogListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLog'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+        links:
+          $ref: '#/components/schemas/ListLinks'
+    PageMeta:
+      type: object
+      required: [number, size, total_items, total_pages]
+      properties:
+        number:
+          type: integer
+        size:
+          type: integer
+        total_items:
+          type: integer
+        total_pages:
+          type: integer
+    ListMeta:
+      type: object
+      required: [page, request_id]
+      properties:
+        page:
+          $ref: '#/components/schemas/PageMeta'
+        request_id:
+          type: string
+    ListLinks:
+      type: object
+      properties:
+        self:
+          type: string
+        first:
+          type: [string, 'null']
+        prev:
+          type: [string, 'null']
+        next:
+          type: [string, 'null']
+        last:
+          type: [string, 'null']
+    ErrorDetail:
+      type: object
+      properties:
+        field:
+          type: [string, 'null']
+        reason:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                $ref: '#/components/schemas/ErrorDetail'
+            request_id:
+              type: string
