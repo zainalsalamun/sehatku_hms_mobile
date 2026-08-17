@@ -1,0 +1,835 @@
+{
+  "info": {
+    "_postman_id": "sehatku-hms-backend-collection-v1",
+    "name": "SehatKu HMS Backend API",
+    "description": "Postman Collection resmi untuk pengujian seluruh REST API SehatKu Hospital Management System (NestJS + Prisma + PostgreSQL).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "doctor_id",
+      "value": "d1",
+      "type": "string"
+    },
+    {
+      "key": "patient_id",
+      "value": "p1",
+      "type": "string"
+    },
+    {
+      "key": "appointment_id",
+      "value": "a1",
+      "type": "string"
+    },
+    {
+      "key": "invoice_id",
+      "value": "inv-102",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01. Authentication",
+      "item": [
+        {
+          "name": "Login - Hospital Admin (Auto Token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.accessToken) {",
+                  "        pm.collectionVariables.set('auth_token', jsonData.accessToken);",
+                  "        console.log('✅ Auth Token berhasil disimpan ke variabel koleksi.');",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@sehatku.id\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Login - Doctor Maya",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"doctor@sehatku.id\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Login - Patient Nadia",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"patient@sehatku.id\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Doctors",
+      "item": [
+        {
+          "name": "Get List Doctors (All)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/doctors",
+              "host": ["{{base_url}}"],
+              "path": ["doctors"]
+            }
+          }
+        },
+        {
+          "name": "Filter Doctors by Query & Department",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/doctors?query=Maya&departmentId=dept-1",
+              "host": ["{{base_url}}"],
+              "path": ["doctors"],
+              "query": [
+                { "key": "query", "value": "Maya" },
+                { "key": "departmentId", "value": "dept-1" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Doctor by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/doctors/{{doctor_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["doctors", "{{doctor_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Create New Doctor (Admin Auth)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"dr. Farhan Malik, Sp.A\",\n  \"licenseNumber\": \"SIP.449.1/199/2024\",\n  \"departmentId\": \"dept-3\",\n  \"specialist\": \"Pediatri\",\n  \"experienceYears\": 7,\n  \"phone\": \"0812-7788-9900\",\n  \"email\": \"farhan.malik@sehatku-hospital.id\",\n  \"scheduleDays\": [\"Senin\", \"Rabu\", \"Kamis\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/doctors",
+              "host": ["{{base_url}}"],
+              "path": ["doctors"]
+            }
+          }
+        },
+        {
+          "name": "Update Doctor (Admin Auth)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"dr. Maya Pratama, Sp.JP\",\n  \"licenseNumber\": \"SIP.449.1/092/2021\",\n  \"departmentId\": \"dept-1\",\n  \"specialist\": \"Kardiologi & Vaskular\",\n  \"experienceYears\": 13,\n  \"phone\": \"0812-3456-7890\",\n  \"email\": \"maya.pratama@sehatku-hospital.id\",\n  \"scheduleDays\": [\"Senin\", \"Rabu\", \"Jumat\"],\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/doctors/{{doctor_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["doctors", "{{doctor_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Toggle Doctor Active Status (Admin Auth)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/doctors/{{doctor_id}}/toggle-active",
+              "host": ["{{base_url}}"],
+              "path": ["doctors", "{{doctor_id}}", "toggle-active"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Patients",
+      "item": [
+        {
+          "name": "Get List Patients (All)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/patients",
+              "host": ["{{base_url}}"],
+              "path": ["patients"]
+            }
+          }
+        },
+        {
+          "name": "Filter Patients by MRN / Name",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/patients?query=Nadia",
+              "host": ["{{base_url}}"],
+              "path": ["patients"],
+              "query": [{ "key": "query", "value": "Nadia" }]
+            }
+          }
+        },
+        {
+          "name": "Get Patient Detail by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/patients/{{patient_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["patients", "{{patient_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Register New Patient (Admin/Staff Auth)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"medicalRecordNumber\": \"MRN-2026-099\",\n  \"name\": \"Bambang Pamungkas\",\n  \"nik\": \"3201123456780099\",\n  \"birthDate\": \"1985-06-10\",\n  \"gender\": \"Laki-laki\",\n  \"bloodType\": \"O+\",\n  \"insuranceProvider\": \"BPJS Kesehatan Mandiri\",\n  \"phone\": \"0812-4455-6677\",\n  \"email\": \"bambang@gmail.com\",\n  \"address\": \"Jl. Thamrin No. 88, Jakarta Pusat\",\n  \"emergencyContact\": \"Tribun (Keluarga) - 0812-4455-6600\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/patients",
+              "host": ["{{base_url}}"],
+              "path": ["patients"]
+            }
+          }
+        },
+        {
+          "name": "Update Patient Data (Admin/Staff Auth)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"medicalRecordNumber\": \"MRN-2026-001\",\n  \"name\": \"Nadia Putri Utama\",\n  \"nik\": \"3201123456780001\",\n  \"birthDate\": \"1995-04-12\",\n  \"gender\": \"Perempuan\",\n  \"bloodType\": \"O+\",\n  \"insuranceProvider\": \"BPJS Kesehatan Mandiri\",\n  \"phone\": \"0812-9988-7766\",\n  \"email\": \"nadia.putri@gmail.com\",\n  \"address\": \"Jl. Melati No. 14, Jakarta Selatan\",\n  \"emergencyContact\": \"Dimas (Suami) - 0812-9988-7700\",\n  \"status\": \"Aktif\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/patients/{{patient_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["patients", "{{patient_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Appointments & Queue",
+      "item": [
+        {
+          "name": "Get List Appointments (All)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/appointments",
+              "host": ["{{base_url}}"],
+              "path": ["appointments"]
+            }
+          }
+        },
+        {
+          "name": "Filter Appointments by Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/appointments?status=Menunggu",
+              "host": ["{{base_url}}"],
+              "path": ["appointments"],
+              "query": [{ "key": "status", "value": "Menunggu" }]
+            }
+          }
+        },
+        {
+          "name": "Get Patient Reservation History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/appointments?patientId={{patient_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["appointments"],
+              "query": [{ "key": "patientId", "value": "{{patient_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Get Appointment Detail by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/appointments/{{appointment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["appointments", "{{appointment_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Create Appointment (Auth)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"doctorId\": \"d1\",\n  \"patientId\": \"p1\",\n  \"dateLabel\": \"Hari ini\",\n  \"appointmentTime\": \"13:30 WIB\",\n  \"departmentName\": \"Kardiologi & Vaskular\",\n  \"reason\": \"Pemeriksaan Rutin Jantung\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/appointments",
+              "host": ["{{base_url}}"],
+              "path": ["appointments"]
+            }
+          }
+        },
+        {
+          "name": "Check-In Appointment (Staf Auth)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/appointments/{{appointment_id}}/check-in",
+              "host": ["{{base_url}}"],
+              "path": ["appointments", "{{appointment_id}}", "check-in"]
+            }
+          }
+        },
+        {
+          "name": "Complete Appointment Consultation (Doctor Auth)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/appointments/{{appointment_id}}/complete",
+              "host": ["{{base_url}}"],
+              "path": ["appointments", "{{appointment_id}}", "complete"]
+            }
+          }
+        },
+        {
+          "name": "Cancel Appointment with Reason (Auth)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cancellationReason\": \"Pasien reschedule jadwal pemeriksaan ke minggu depan via telepon\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/appointments/{{appointment_id}}/cancel",
+              "host": ["{{base_url}}"],
+              "path": ["appointments", "{{appointment_id}}", "cancel"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. Billing, Cashier POS & Official Receipts",
+      "item": [
+        {
+          "name": "Get List Invoices (All)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/billing/invoices",
+              "host": ["{{base_url}}"],
+              "path": ["billing", "invoices"]
+            }
+          }
+        },
+        {
+          "name": "Filter Invoices by Status (Menunggu)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/billing/invoices?status=Menunggu",
+              "host": ["{{base_url}}"],
+              "path": ["billing", "invoices"],
+              "query": [{ "key": "status", "value": "Menunggu" }]
+            }
+          }
+        },
+        {
+          "name": "Filter Invoices by Patient ID / Name",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/billing/invoices?patientId={{patient_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["billing", "invoices"],
+              "query": [{ "key": "patientId", "value": "{{patient_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Get Invoice Detail by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/billing/invoices/{{invoice_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["billing", "invoices", "{{invoice_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Official Receipt Data for PDF Printing",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/billing/invoices/{{invoice_id}}/receipt-data",
+              "host": ["{{base_url}}"],
+              "path": ["billing", "invoices", "{{invoice_id}}", "receipt-data"]
+            }
+          }
+        },
+        {
+          "name": "Create New Invoice (POS Billing)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": \"p1\",\n  \"patientName\": \"Nadia Putri\",\n  \"doctorName\": \"dr. Maya Pratama, Sp.JP\",\n  \"serviceName\": \"Konsultasi Poli Kardiologi & EKG\",\n  \"amount\": 350000,\n  \"status\": \"Menunggu\",\n  \"paymentMethod\": \"QRIS Dinamis\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/billing/invoices",
+              "host": ["{{base_url}}"],
+              "path": ["billing", "invoices"]
+            }
+          }
+        },
+        {
+          "name": "Process POS Payment (Cashier / Multi-Method)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentMethod\": \"QRIS Dinamis\",\n  \"amountPaid\": 350000,\n  \"cashierName\": \"Kasir Utama - Siti Rahma\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/billing/invoices/{{invoice_id}}/pay",
+              "host": ["{{base_url}}"],
+              "path": ["billing", "invoices", "{{invoice_id}}", "pay"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06. Audit Logs",
+      "item": [
+        {
+          "name": "Get List Audit Logs (Admin Auth)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/audit-logs",
+              "host": ["{{base_url}}"],
+              "path": ["audit-logs"]
+            }
+          }
+        },
+        {
+          "name": "Filter Audit Logs by Action",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/audit-logs?action=LOGIN",
+              "host": ["{{base_url}}"],
+              "path": ["audit-logs"],
+              "query": [{ "key": "action", "value": "LOGIN" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07. Clinical EMR & Encounters",
+      "item": [
+        {
+          "name": "Get ICD-10 Diagnosis Catalog",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/medical-records/icd10?query=hyper",
+              "host": ["{{base_url}}"],
+              "path": ["medical-records", "icd10"],
+              "query": [{ "key": "query", "value": "hyper" }]
+            }
+          }
+        },
+        {
+          "name": "Get Hospital Pharmacy Formulary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/medical-records/formulary",
+              "host": ["{{base_url}}"],
+              "path": ["medical-records", "formulary"]
+            }
+          }
+        },
+        {
+          "name": "Get All Medical Records / Patient History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/medical-records?patientId=p1",
+              "host": ["{{base_url}}"],
+              "path": ["medical-records"],
+              "query": [{ "key": "patientId", "value": "p1" }]
+            }
+          }
+        },
+        {
+          "name": "Create Clinical Consultation Encounter & E-Prescription (SOAP)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": \"p1\",\n  \"doctorId\": \"d1\",\n  \"appointmentId\": \"a1\",\n  \"anamnesis\": \"Pasien mengeluh berdebar ringan setelah berolahraga berat.\",\n  \"physicalExam\": \"TD: 120/80 mmHg, Nadi: 76x/mnt, Suhu: 36.5 C, SpO2: 99%, TB: 168cm, BB: 62kg (BMI 22.0 Normal)\",\n  \"diagnosisSummary\": \"Essential (primary) hypertension (ICD-10: I10)\",\n  \"diagnoses\": [\n    {\n      \"icd10Code\": \"I10\",\n      \"description\": \"Essential (primary) hypertension\",\n      \"type\": \"primary\"\n    }\n  ],\n  \"prescriptions\": [\n    {\n      \"medicineName\": \"Amlodipine Besylate 5mg\",\n      \"dosage\": \"5 mg\",\n      \"frequency\": \"1x sehari pagi\",\n      \"route\": \"oral\",\n      \"durationDays\": 30,\n      \"instruction\": \"Diminum sesudah makan pagi\"\n    }\n  ],\n  \"notes\": \"Kontrol ulang dalam 30 hari\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/medical-records",
+              "host": ["{{base_url}}"],
+              "path": ["medical-records"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08. Departments & Polyclinics",
+      "item": [
+        {
+          "name": "Get All Departments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/departments",
+              "host": ["{{base_url}}"],
+              "path": ["departments"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "09. Pharmacy & Medication Dispensing",
+      "item": [
+        {
+          "name": "Get All Prescriptions Queue",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/pharmacy/prescriptions",
+              "host": ["{{base_url}}"],
+              "path": ["pharmacy", "prescriptions"]
+            }
+          }
+        },
+        {
+          "name": "Filter Prescriptions by Status (issued)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/pharmacy/prescriptions?status=issued",
+              "host": ["{{base_url}}"],
+              "path": ["pharmacy", "prescriptions"],
+              "query": [{ "key": "status", "value": "issued" }]
+            }
+          }
+        },
+        {
+          "name": "Update Prescription Dispensing Status (dispensing / ready / completed)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ready\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/pharmacy/prescriptions/{{prescription_id}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["pharmacy", "prescriptions", "{{prescription_id}}", "status"]
+            }
+          }
+        },
+        {
+          "name": "Get Pharmacy Inventory & Expiration Dates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/pharmacy/inventory?query=Amlodipine",
+              "host": ["{{base_url}}"],
+              "path": ["pharmacy", "inventory"],
+              "query": [{ "key": "query", "value": "Amlodipine" }]
+            }
+          }
+        },
+        {
+          "name": "Restock / Adjust Medicine Stock",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{auth_token}}", "type": "string" }]
+            },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 50\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/pharmacy/inventory/med-1/stock",
+              "host": ["{{base_url}}"],
+              "path": ["pharmacy", "inventory", "med-1", "stock"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "09. Notifications",
+      "item": [
+        {
+          "name": "Get Notifications (Patient)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications?role=patient",
+              "host": ["{{base_url}}"],
+              "path": ["notifications"],
+              "query": [{ "key": "role", "value": "patient" }]
+            }
+          }
+        },
+        {
+          "name": "Get Notifications (Doctor)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications?role=doctor",
+              "host": ["{{base_url}}"],
+              "path": ["notifications"],
+              "query": [{ "key": "role", "value": "doctor" }]
+            }
+          }
+        },
+        {
+          "name": "Get Notifications (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications?role=admin",
+              "host": ["{{base_url}}"],
+              "path": ["notifications"],
+              "query": [{ "key": "role", "value": "admin" }]
+            }
+          }
+        },
+        {
+          "name": "Get Unread Notification Count Badge",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications/unread-count?role=patient",
+              "host": ["{{base_url}}"],
+              "path": ["notifications", "unread-count"],
+              "query": [{ "key": "role", "value": "patient" }]
+            }
+          }
+        },
+        {
+          "name": "Mark Notification as Read",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications/notif-1/read",
+              "host": ["{{base_url}}"],
+              "path": ["notifications", "notif-1", "read"]
+            }
+          }
+        },
+        {
+          "name": "Mark All Notifications as Read",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications/mark-all-read?role=patient",
+              "host": ["{{base_url}}"],
+              "path": ["notifications", "mark-all-read"],
+              "query": [{ "key": "role", "value": "patient" }]
+            }
+          }
+        },
+        {
+          "name": "Send Manual Broadcast Notification (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"all\",\n  \"title\": \"Pengumuman Layanan RS\",\n  \"message\": \"Poliklinik Spesialis beroperasi normal pada hari libur nasional.\",\n  \"type\": \"system\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/notifications",
+              "host": ["{{base_url}}"],
+              "path": ["notifications"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
