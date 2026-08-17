@@ -1,0 +1,48 @@
+# Flutter / Dart Mobile & Web Ignores
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+coverage/
+doc/api/
+
+.env
+.env.*
+!.env.example
+
+# Android
+android/.gradle/
+android/local.properties
+android/app/debug/
+android/app/profile/
+android/app/release/
+android/app/build/
+android/key.properties
+*.jks
+*.keystore
+
+# iOS & macOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/.last_build_id
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/app.flx
+ios/Flutter/app.zip
+ios/Flutter/flutter_assets/
+macos/Pods/
+macos/Flutter/ephemeral/
+macos/Flutter/GeneratedPluginRegistrant.swift
+
+# Firebase / Secrets
+google-services.json
+GoogleService-Info.plist
+
+# IDE & OS
+.DS_Store
+.idea/
+*.iml
+.vscode/
