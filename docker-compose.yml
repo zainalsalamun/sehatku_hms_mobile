@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sehatku-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sehatku_admin
+      POSTGRES_PASSWORD: sehatku_password_secure_2026
+      POSTGRES_DB: sehatku_hms_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    networks:
+      - sehatku-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sehatku_admin -d sehatku_hms_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: sehatku-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - sehatku-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: sehatku-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@sehatku.id
+      PGADMIN_DEFAULT_PASSWORD: admin_password_2026
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - sehatku-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  sehatku-network:
+    driver: bridge
