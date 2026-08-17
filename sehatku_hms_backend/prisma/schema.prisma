@@ -1,0 +1,363 @@
+// ==============================================================================
+// Prisma Schema for SehatKu Hospital Management System
+// Target Database: PostgreSQL 15/16
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Hospital {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  timezone    String   @default("Asia/Jakarta")
+  address     String?
+  phone       String?
+  email       String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+  version     Int      @default(1)
+
+  departments  Department[]
+  doctors      Doctor[]
+  patients     Patient[]
+  appointments Appointment[]
+  userRoles    UserRole[]
+  invoices     Invoice[]
+  auditLogs    AuditLog[]
+
+  @@map("hospitals")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  phone        String?
+  passwordHash String    @map("password_hash")
+  fullName     String    @map("full_name")
+  status       String    @default("active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at")
+  version      Int       @default(1)
+
+  userRoles     UserRole[]
+  doctors       Doctor[]
+  patients      Patient[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  userRoles   UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  roleId     String    @map("role_id")
+  hospitalId String?   @map("hospital_id")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role      @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  hospital   Hospital? @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId, hospitalId])
+  @@map("user_roles")
+}
+
+model Department {
+  id          String   @id @default(uuid())
+  hospitalId  String   @map("hospital_id")
+  code        String
+  name        String
+  description String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+  version     Int      @default(1)
+
+  hospital    Hospital @relation(fields: [hospitalId], references: [id], onDelete: Restrict)
+  doctors     Doctor[]
+
+  @@unique([hospitalId, code])
+  @@map("departments")
+}
+
+model Doctor {
+  id              String    @id @default(uuid())
+  userId          String?   @map("user_id")
+  hospitalId      String    @map("hospital_id")
+  departmentId    String    @map("department_id")
+  licenseNumber   String    @map("license_number")
+  name            String
+  specialist      String
+  biography       String?
+  experienceYears Int       @default(0) @map("experience_years")
+  rating          Decimal   @default(5.00) @db.Decimal(3, 2)
+  availableToday  Boolean   @default(true) @map("available_today")
+  status          String    @default("active")
+  phone           String?
+  email           String?
+  scheduleDays    String[]  @default(["Senin", "Rabu", "Jumat"]) @map("schedule_days")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
+  version         Int       @default(1)
+
+  user            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  hospital        Hospital         @relation(fields: [hospitalId], references: [id], onDelete: Restrict)
+  department      Department       @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  schedules       DoctorSchedule[]
+  appointments    Appointment[]
+  encounters      Encounter[]
+  prescriptions   Prescription[]
+
+  @@unique([hospitalId, licenseNumber])
+  @@map("doctors")
+}
+
+model DoctorSchedule {
+  id          String   @id @default(uuid())
+  doctorId    String   @map("doctor_id")
+  dayOfWeek   String   @map("day_of_week")
+  startTime   String   @map("start_time")
+  endTime     String   @map("end_time")
+  slotMinutes Int      @default(30) @map("slot_minutes")
+  maxPatients Int      @default(20) @map("max_patients")
+  status      String   @default("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+  version     Int      @default(1)
+
+  doctor      Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@map("doctor_schedules")
+}
+
+model Patient {
+  id                  String   @id @default(uuid())
+  userId              String?  @map("user_id")
+  hospitalId          String   @map("hospital_id")
+  medicalRecordNumber String   @map("medical_record_number")
+  nik                 String?
+  name                String
+  birthDate           DateTime @map("birth_date") @db.Date
+  gender              String
+  bloodType           String?  @map("blood_type")
+  insuranceProvider   String?  @map("insurance_provider")
+  insuranceNumber     String?  @map("insurance_number")
+  phone               String?
+  email               String?
+  address             String?
+  emergencyContact    String?  @map("emergency_contact")
+  status              String   @default("Aktif")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
+  version             Int      @default(1)
+
+  user                User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  hospital            Hospital      @relation(fields: [hospitalId], references: [id], onDelete: Restrict)
+  appointments        Appointment[]
+  encounters          Encounter[]
+  prescriptions       Prescription[]
+  invoices            Invoice[]
+
+  @@unique([hospitalId, medicalRecordNumber])
+  @@map("patients")
+}
+
+model Appointment {
+  id                 String   @id @default(uuid())
+  hospitalId         String   @map("hospital_id")
+  doctorId           String   @map("doctor_id")
+  patientId          String   @map("patient_id")
+  dateLabel          String   @map("date_label")
+  appointmentDate    DateTime @default(now()) @map("appointment_date") @db.Date
+  appointmentTime    String   @map("appointment_time")
+  queueNumber        String   @map("queue_number")
+  departmentName     String   @map("department_name")
+  reason             String?
+  cancellationReason String?  @map("cancellation_reason")
+  status             String   @default("Menunggu")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at")
+  version            Int      @default(1)
+
+  hospital           Hospital     @relation(fields: [hospitalId], references: [id], onDelete: Restrict)
+  doctor             Doctor       @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  patient            Patient      @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  queueTicket        QueueTicket?
+  encounters         Encounter[]
+  invoices           Invoice[]
+
+  @@map("appointments")
+}
+
+model QueueTicket {
+  id            String    @id @default(uuid())
+  appointmentId String    @unique @map("appointment_id")
+  serviceDate   DateTime  @default(now()) @map("service_date") @db.Date
+  prefix        String
+  sequence      Int
+  queueNumber   String    @map("queue_number")
+  status        String    @default("waiting")
+  calledAt      DateTime? @map("called_at")
+  completedAt   DateTime? @map("completed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
+  version       Int       @default(1)
+
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@map("queue_tickets")
+}
+
+model Encounter {
+  id               String    @id @default(uuid())
+  appointmentId    String?   @map("appointment_id")
+  patientId        String    @map("patient_id")
+  doctorId         String    @map("doctor_id")
+  startedAt        DateTime  @default(now()) @map("started_at")
+  endedAt          DateTime? @map("ended_at")
+  anamnesis        String?
+  physicalExam     String?   @map("physical_exam")
+  diagnosisSummary String?   @map("diagnosis_summary")
+  status           String    @default("draft")
+  signedAt         DateTime? @map("signed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at")
+  version          Int       @default(1)
+
+  appointment      Appointment?   @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  patient          Patient        @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  doctor           Doctor         @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  diagnoses        Diagnosis[]
+  prescriptions    Prescription[]
+
+  @@map("encounters")
+}
+
+model Diagnosis {
+  id          String   @id @default(uuid())
+  encounterId String   @map("encounter_id")
+  icd10Code   String?  @map("icd10_code")
+  description String
+  type        String   @default("primary")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  encounter   Encounter @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+
+  @@map("diagnoses")
+}
+
+model Prescription {
+  id          String   @id @default(uuid())
+  encounterId String   @map("encounter_id")
+  patientId   String   @map("patient_id")
+  doctorId    String   @map("doctor_id")
+  notes       String?
+  status      String   @default("issued")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  encounter   Encounter          @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+  patient     Patient            @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  doctor      Doctor             @relation(fields: [doctorId], references: [id], onDelete: Restrict)
+  items       PrescriptionItem[]
+
+  @@map("prescriptions")
+}
+
+model PrescriptionItem {
+  id             String   @id @default(uuid())
+  prescriptionId String   @map("prescription_id")
+  medicineName   String   @map("medicine_name")
+  dosage         String
+  frequency      String
+  route          String   @default("oral")
+  durationDays   Int      @default(3) @map("duration_days")
+  instruction    String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+
+  @@map("prescription_items")
+}
+
+model Invoice {
+  id            String    @id @default(uuid())
+  invoiceNumber String    @unique @map("invoice_number")
+  hospitalId    String    @map("hospital_id")
+  appointmentId String?   @map("appointment_id")
+  patientId     String    @map("patient_id")
+  patientName   String    @map("patient_name")
+  doctorName    String    @map("doctor_name")
+  serviceName   String    @map("service_name")
+  amount        Decimal   @default(0.00) @db.Decimal(12, 2)
+  status        String    @default("Menunggu")
+  paymentMethod String    @default("Tunai") @map("payment_method")
+  paidAt        DateTime? @map("paid_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
+  version       Int       @default(1)
+
+  hospital      Hospital     @relation(fields: [hospitalId], references: [id], onDelete: Restrict)
+  patient       Patient      @relation(fields: [patientId], references: [id], onDelete: Restrict)
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@map("invoices")
+}
+
+model AuditLog {
+  id           String    @id @default(uuid())
+  hospitalId   String?   @map("hospital_id")
+  actorId      String?   @map("actor_id")
+  actorName    String    @map("actor_name")
+  actorRole    String    @map("actor_role")
+  action       String
+  resourceType String    @map("resource_type")
+  resourceId   String    @map("resource_id")
+  details      String
+  ipAddress    String    @default("127.0.0.1") @map("ip_address")
+  userAgent    String?   @map("user_agent")
+  timestamp    DateTime  @default(now())
+
+  hospital     Hospital? @relation(fields: [hospitalId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String?  @map("user_id")
+  role      String   @default("all") // 'patient', 'doctor', 'admin', 'all'
+  title     String
+  message   String
+  type      String   @default("info") // 'appointment', 'prescription', 'billing', 'clinical', 'system', 'emergency'
+  isRead    Boolean  @default(false) @map("is_read")
+  targetId  String?  @map("target_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("notifications")
+}
+
